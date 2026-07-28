@@ -12,7 +12,7 @@ from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 
 st.set_page_config(
-    page_title="AI ATS Resume Evaluator",
+    page_title="AI ATS Resume Evaluator & Auditor",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -158,6 +158,14 @@ COMMON_SKILLS = set([
     "communication", "leadership", "problem solving", "project management"
 ])
 
+GEMINI_API_KEY = "PASTE_YOUR_FREE_GEMINI_API_KEY_HERE"
+
+try:
+    genai.configure(api_key=GEMINI_API_KEY)
+    llm_model = genai.GenerativeModel('gemini-pro')
+except Exception as e:
+    pass
+
 def extract_text_from_pdf(pdf_file):
     reader = pypdf.PdfReader(pdf_file)
     extracted_text = ""
@@ -193,8 +201,34 @@ def calculate_semantic_similarity(text1, text2):
     sim = cosine_similarity([embeddings[0]], [embeddings[1]])[0][0]
     return float(sim) * 100
 
-st.markdown('<div class="main-header">⚡ AI ATS Resume Evaluator</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Automated Candidate Suitability & Skill Matching Engine</div>', unsafe_allow_html=True)
+def generate_automated_audit(cv_text, jd_text):
+    if GEMINI_API_KEY == "PASTE_YOUR_FREE_GEMINI_API_KEY_HERE":
+        return "Please configure your Gemini API Key to enable automated weakness audit and rewrites."
+    try:
+        prompt = f"""
+        You are an expert executive resume reviewer and ATS auditor. 
+        Analyze the following resume text against the provided job description.
+        
+        Job Description:
+        {jd_text}
+        
+        Resume Text:
+        {cv_text}
+        
+        Please perform a quick audit and output:
+        1. **3 Specific Weak Points or Poor Bullet Points** found in the resume.
+        2. **Why each point is weak** (e.g., lacks metrics, weak verbs, vague description, or missing keywords).
+        3. **A Recommended High-Impact Rewrite** for each weak point.
+        
+        Keep your response clear, concise, and structured with bullet points.
+        """
+        response = llm_model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"Error generating automated suggestions: {str(e)}"
+
+st.markdown('<div class="main-header">⚡ AI ATS Resume Evaluator & Auditor</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Automated Candidate Suitability, Skill Gap Analysis & Weakness Audit</div>', unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("⚙️ Dashboard Controls")
@@ -234,7 +268,7 @@ if st.button("🚀 Analyze & Evaluate Match", use_container_width=True):
     elif not uploaded_file:
         st.warning("Please upload a PDF resume.")
     else:
-        with st.spinner("Processing NLP embeddings and analyzing skill gap..."):
+        with st.spinner("Processing NLP embeddings, analyzing skill gap, and auditing weaknesses..."):
             raw_cv_text = extract_text_from_pdf(uploaded_file)
             cleaned_cv = clean_text(raw_cv_text)
             cleaned_jd = clean_text(job_description)
@@ -350,64 +384,11 @@ if st.button("🚀 Analyze & Evaluate Match", use_container_width=True):
                         st.success("Candidate covers all major skills in the job description.")
                     st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown("<br><br>", unsafe_allow_html=True)
-st.markdown('<div class="main-header" style="font-size: 1.8rem;">✨ AI Resume Rewriter</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Paste a weak bullet point or paragraph to get professional, ATS-friendly suggestions.</div>', unsafe_allow_html=True)
-
-GEMINI_API_KEY = "AQ.Ab8RN6JaHvD_FPUTuoQ0XavqeEUtcT9dqTnYcxcGo6gAY3VjcQ" 
-
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    llm_model = genai.GenerativeModel('gemini-pro')
-except Exception as e:
-    st.error("Failed to initialize AI model. Please check your API key.")
-
-rw_col1, rw_col2 = st.columns([1, 1], gap="medium")
-
-with rw_col1:
-    st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-    original_text = st.text_area(
-        "Original Resume Text:",
-        height=150,
-        placeholder="e.g., I made a new database that helped the company work faster."
-    )
-    
-    tone_option = st.selectbox(
-        "Improvement Goal:",
-        ["Make it more professional & add action verbs", 
-         "Make it quantifiable (add metrics)", 
-         "Shorten and make it punchy"]
-    )
-    
-    rewrite_btn = st.button("💡 Generate Suggestions", use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with rw_col2:
-    st.markdown('<div class="custom-card">', unsafe_allow_html=True)
-    st.subheader("AI Suggestions")
-    
-    if rewrite_btn:
-        if not original_text.strip():
-            st.warning("Please paste some text to improve.")
-        elif GEMINI_API_KEY == "PASTE_YOUR_FREE_GEMINI_API_KEY_HERE":
-            st.error("Please add your Gemini API Key in the code on line 249 to use this feature.")
-        else:
-            with st.spinner("Generating professional rewrites..."):
-                prompt = f"""
-                You are an expert executive resume writer. 
-                The user has provided a bullet point or paragraph from their resume.
-                Goal: {tone_option}
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown('<div class="custom-card">', unsafe_allow_html=True)
+                st.subheader("🔍 Automated AI Resume Audit & Rewrite Suggestions")
+                st.write("The AI has analyzed the extracted text from your resume to highlight weak points and recommended rewrites:")
                 
-                Original Text: "{original_text}"
-                
-                Provide 3 different, highly professional ways to rewrite this text. 
-                Do not include extra conversation, just the 3 bulleted options.
-                """
-                
-                response = llm_model.generate_content(prompt)
-                st.success("Here are better ways to phrase this:")
-                st.write(response.text)
-    else:
-        st.info("Your AI-suggested improvements will appear here.")
-        
-    st.markdown('</div>', unsafe_allow_html=True)
+                audit_report = generate_automated_audit(raw_cv_text, job_description)
+                st.markdown(audit_report)
+                st.markdown('</div>', unsafe_allow_html=True)
